@@ -1,11 +1,11 @@
 
 # Overview
 
-This is the code needed on the Teensy 4.1 to run Fuzix.
+This is the code needed on the Teensy 4.1 version of PZ1 to run Fuzix.
 
 ## Version info
 
-First working release.
+First working release, using 512KiB RAM.
 
 ## License
 
