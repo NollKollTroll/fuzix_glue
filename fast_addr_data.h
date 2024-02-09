@@ -1,5 +1,5 @@
 /*
-Written in 2022 by Adam Klotblixt (adam.klotblixt@gmail.com)
+Written in 2022-24 by Adam Klotblixt (adam.klotblixt@gmail.com)
 
 To the extent possible under law, the author have dedicated all
 copyright and related and neighboring rights to this software to the
@@ -14,7 +14,22 @@ along with this software. If not, see
 #ifndef FAST_ADDR_DATA_H
 #define FAST_ADDR_DATA_H
 
-extern uint8_t memory6502[];
+extern uint8_t ram6502[];
+extern uint8_t bankReg[];
+
+static inline uint8_t banked6502Read(uint16_t cpuAddr)
+{
+    uint32_t block = cpuAddr / BANK_SIZE;
+    uint32_t base = cpuAddr & (BANK_SIZE - 1);
+    return(ram6502[(bankReg[block] * BANK_SIZE) + base]);
+}
+
+static inline void banked6502Write(uint16_t cpuAddr, uint8_t cpuData)
+{
+    uint32_t block = cpuAddr / BANK_SIZE;
+    uint32_t base = cpuAddr & (BANK_SIZE - 1);
+    ram6502[(bankReg[block] * BANK_SIZE) + base] = cpuData;
+}
 
 static inline void dataBusInput(void)
 {

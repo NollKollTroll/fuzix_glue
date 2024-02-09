@@ -1,5 +1,5 @@
 /*
-Written in 2022 by Adam Klotblixt (adam.klotblixt@gmail.com)
+Written in 2022-24 by Adam Klotblixt (adam.klotblixt@gmail.com)
 
 To the extent possible under law, the author have dedicated all
 copyright and related and neighboring rights to this software to the
@@ -11,11 +11,12 @@ along with this software. If not, see
 <http://creativecommons.org/publicdomain/zero/1.0/>.
 */
 
-#define DEBUG_SPEED 0
-#define DEBUG_IO 1
-#define TRACE_CLK 0
+#define DEBUG_IO 0
+#define DEBUG_MEM 0
+#define DEBUG_STEP 0
+#define DEBUG_SPEED 1
 
-#define RAM_SIZE_KIB          1024 //requires soldered qspi ram
+#define RAM_SIZE_KIB          512
 #define RAM_SIZE              (RAM_SIZE_KIB * 1024)
 #define BANK_SIZE_KIB         16
 #define BANK_SIZE             (BANK_SIZE_KIB * 1024)
@@ -29,88 +30,72 @@ along with this software. If not, see
 #define SerPC1                SerialUSB1
 #define SerDebug              SerialUSB2
 
+EXTMEM uint8_t ram6502[RAM_SIZE]; //requires soldered qspi ram
+uint8_t bankReg[4];
+uint32_t frameTimer;
+uint32_t frameCounter;
+
 #include <SD.h>
 #include <SPI.h>
 #include "portdefs.h"
 #include "pindefs.h"
 #include "fast_addr_data.h"
 #include "irq_timer.h"
+#include "fileSystem.h"
 #include "fuzix_kernel.h"
+#include "trace_debug.h"
 
-uint32_t cpuTicks;
-uint32_t startTime;
-
-#define SD_CS BUILTIN_SDCARD
-File fuzixHD;
-
-EXTMEM uint8_t memory6502[RAM_SIZE];
-uint8_t io6502[256];
-
-static inline uint8_t io6502Read(uint16_t cpuAddr)
+static inline void cpuTick(void)
 {
-    return io6502[cpuAddr & 255];
-}
-
-static inline void io6502Write(uint16_t cpuAddr , uint8_t cpuData)
-{
-    io6502[cpuAddr & 255] = cpuData;
-}
-
-inline uint8_t banked6502Read(uint16_t cpuAddr)
-{
-    uint32_t block = cpuAddr / BANK_SIZE;
-    uint32_t base = cpuAddr & (BANK_SIZE - 1);
-    return(memory6502[(io6502Read(PORT_BANK_0 + block) * BANK_SIZE) + base]);
-}
-
-inline void banked6502Write(uint16_t cpuAddr, uint8_t cpuData)
-{
-    uint32_t block = cpuAddr / BANK_SIZE;
-    uint32_t base = cpuAddr & (BANK_SIZE - 1);
-    memory6502[(io6502Read(PORT_BANK_0 + block) * BANK_SIZE) + base] = cpuData;
-}
-
-void cpuTick(void)
-{ 
     uint8_t cpuData;
     uint16_t cpuAddr;
 
     // entering CLK phase low
-    // first wait for tADS before addr and R/W are stable
     // lots of delay already because of looping
-    DELAY_40(); // tADS >= 40ns @3.3V
+    // but the low CLK must be at least tPWL long
+    delayNanoseconds(63); // tPWL >= 63ns @3.3V
+    // begin CLK high phase
+    digitalWriteFast(GPIO_CLK, 1);
     // get 65C02 addr
     cpuAddr = addrBusRead();
-    //debugHW("CLK 0 0x" + String(addrBusRead(), HEX) + " 0x" + String(dataBusRead(), HEX));
-    // begin CLK high phase
-    digitalWriteFast(GPIO_CLK, 1);    
-    
     if (digitalReadFast(GPIO_RW) == 1)
-    // 65C02 read operation
-    {
-        #if TRACE_CLK == 1
-            if (digitalReadFast(GPIO_SYNC) == 1)
-            {
-                SerDebug.print("op r ");
-            }
-            else
-            {
-                SerDebug.print(" r ");
-            }
-        #endif
-        
-        // read data from memory or device?        
-        if ((cpuAddr & 0xFF00) == 0xFE00)
+    {   // 65C02 read operation
+        if (cpuAddr >= 0xFF00)
+        {   // top page memory read, no banking
+            cpuData = ram6502[cpuAddr];
+            dataBusWrite(cpuData);
+            dataBusOutput();
+            debugMemRead();
+            delayNanoseconds(62); // tPWH >= 62ns @3.3V
+            digitalWriteFast(GPIO_CLK, 0);
+            delayNanoseconds(10); // tDHR >=10ns @3.3V
+            dataBusInput();
+        }
+        if (cpuAddr >= 0xFE00)
         {   // I/O-device read
             switch (cpuAddr)
             {
                 // ******** Memory bank registers ********
-                /* used like default, see below
                 case PORT_BANK_0:
+                {
+                    cpuData = bankReg[0];
+                    break;
+                }
                 case PORT_BANK_1:
+                {
+                    cpuData = bankReg[1];
+                    break;
+                }
                 case PORT_BANK_2:
+                {
+                    cpuData = bankReg[2];
+                    break;
+                }
                 case PORT_BANK_3:
-                */
+                {
+                    cpuData = bankReg[3];
+                    break;
+                }
                 // ******** Serial port registers ********
                 case PORT_SERIAL_0_FLAGS: 
                 {
@@ -163,34 +148,17 @@ void cpuTick(void)
                     break;
                 }
                 // ******** File system registers ********
-                /* used like default, see below
-                case PORT_FILE_SYSTEM_CMD:
-                */                    
-                case PORT_FILE_SYSTEM_DATA:
+                //case PORT_FS_CMD:
+                //case PORT_FS_PRM_0:
+                //case PORT_FS_PRM_1:
+                case PORT_FS_DATA:
                 {
-                    if (fuzixHD.available())
-                    {
-                        cpuData = fuzixHD.read();                        
-                        io6502Write(PORT_FILE_SYSTEM_STATUS, (uint8_t)fileSystemStatus_e::OK);
-                    #if (DEBUG_IO == 1)
-                        //SerDebug.print("FS:READ:OK ");
-                        //SerDebug.println(cpuData, HEX);
-                        //SerDebug.print("    ");
-                    #endif
-                    }
-                    else
-                    {
-                        cpuData = 0;
-                        io6502Write(PORT_FILE_SYSTEM_STATUS, (uint8_t)fileSystemStatus_e::NOK);
-                    #if (DEBUG_IO == 1)
-                        SerDebug.println("FS:READ:NOK");
-                    #endif
-                    }
+                    cpuData = fsDataRead();
                     break;
                 }
-                case PORT_FILE_SYSTEM_STATUS: 
+                case PORT_FS_STATUS:
                 {
-                    cpuData = io6502Read(PORT_FILE_SYSTEM_STATUS);
+                    cpuData = fsStatus;
                     break;
                 }
                 // ******** Irq timer registers ********
@@ -201,67 +169,80 @@ void cpuTick(void)
                 }
                 case PORT_IRQ_TIMER_COUNT:
                 {
-                    cpuData = readTimerCount();
+                    cpuData = irqTimerCountRead();
                     break;
                 }
-                /* used like default, see below
-                case PORT_IRQ_TIMER_RESET:
-                case PORT_IRQ_TIMER_TRIG:
-                case PORT_IRQ_TIMER_PAUSE:
-                case PORT_IRQ_TIMER_CONT:
-                */
+                //case PORT_IRQ_TIMER_RESET:
+                //case PORT_IRQ_TIMER_TRIG:
+                //case PORT_IRQ_TIMER_PAUSE:
+                //case PORT_IRQ_TIMER_CONT:
                 // ******** All other I/O registers ********
                 default:
                 {
-                    cpuData = io6502Read(cpuAddr);
-                #if (DEBUG_IO == 1)
-                    SerDebug.print("ior ");
-                    SerDebug.print(cpuAddr, HEX);
-                    SerDebug.print(":");
-                    SerDebug.println(cpuData, HEX);
-                #endif
+                    cpuData = 0xFF;
                     break;
                 }
-            }   
+
+            }
             dataBusWrite(cpuData);
             dataBusOutput();
+            debugIORead();
+            delayNanoseconds(62); // tPWH >= 62ns @3.3V
             digitalWriteFast(GPIO_CLK, 0);    
-            DELAY_10();
+            delayNanoseconds(10); // tDHR >=10ns @3.3V
             dataBusInput();
         }
         else
-        {   // normal banked memory read
+        {   // banked memory read
             cpuData = banked6502Read(cpuAddr);
             dataBusWrite(cpuData);
             dataBusOutput();
+            debugMemRead();
+            delayNanoseconds(62); // tPWH >= 62ns @3.3V
             digitalWriteFast(GPIO_CLK, 0);    
-            DELAY_10();
+            delayNanoseconds(10); // tDHR >=10ns @3.3V
             dataBusInput();
-        }
+       }
     } 
     else
-    // 65C02 write operation
-    {
-        #if TRACE_CLK == 1
-            SerDebug.print(" w ");
-        #endif
-        
-        // write data to memory or device?            
-        if ((cpuAddr & 0xFF00) == 0xFE00)
-        {   // I/O-device write
-            DELAY_40(); // tMDS >= 40ns @3.3V
+    {   // 65C02 write operation
+        if (cpuAddr >= 0xFF00)
+        {   // top page memory write, no banking
+            delayNanoseconds(40); // tMDS >= 40ns @3.3V
             cpuData = dataBusRead();
-            // mirror all I/O-data
-            io6502Write(cpuAddr, cpuData);
+            ram6502[cpuAddr] = cpuData;
+            debugMemWrite();
+            delayNanoseconds(62 - 40); // tPWH >= 62ns @3.3V
+            digitalWriteFast(GPIO_CLK, 0);
+            delayNanoseconds(10); // tDHW >=10ns @3.3V
+        }
+        if (cpuAddr >= 0xFE00)
+        {   // I/O-device write
+            delayNanoseconds(40); // tMDS >= 40ns @3.3V
+            cpuData = dataBusRead();
             switch (cpuAddr)
             {
                 // ******** Memory bank registers ********
-                /* used like default, see below
                 case PORT_BANK_0:
+                {
+                    bankReg[0] = cpuData;
+                    break;
+                }
                 case PORT_BANK_1:
+                {
+                    bankReg[1] = cpuData;
+                    break;
+                }
                 case PORT_BANK_2:
+                {
+                    bankReg[2] = cpuData;
+                    break;
+                }
                 case PORT_BANK_3:
-                */
+                {
+                    bankReg[3] = cpuData;
+                    break;
+                }
                 // ******** Serial port registers ********
                 case PORT_SERIAL_0_OUT: 
                 {
@@ -273,154 +254,78 @@ void cpuTick(void)
                     SerPC1.write(cpuData);
                     break;
                 }                    
-                // ******** Frame counter & CPU counter ********
-                /*
-                case PORT_COUNTER_50HZ:
-                case PORT_COUNTER_60HZ:
-                case PORT_CPU_COUNTER_0:
-                case PORT_CPU_COUNTER_1:
-                case PORT_CPU_COUNTER_2:
-                case PORT_CPU_COUNTER_3:
-                */
                 // ******** File system registers ********
-                case PORT_FILE_SYSTEM_CMD:
+                case PORT_FS_CMD:
                 {
-                    if (cpuData == (uint8_t)fileSystemCmd_e::SELECT) 
-                    {
-                        if (fuzixHD.available())
-                        {
-                            io6502Write(PORT_FILE_SYSTEM_STATUS, (uint8_t)fileSystemStatus_e::OK);
-                        #if (DEBUG_IO == 1)
-                            SerDebug.println("FS:SELECT:OK");
-                        #endif
-                            
-                        }
-                        else
-                        {
-                            io6502Write(PORT_FILE_SYSTEM_STATUS, (uint8_t)fileSystemStatus_e::NOK);
-                        #if (DEBUG_IO == 1)
-                            SerDebug.println("FS:SELECT:NOK_NOT_AVAIL");
-                        #endif
-                        }
-                    }
-                    else if (cpuData == (uint8_t)fileSystemCmd_e::SEEK) 
-                    {
-                        if (fuzixHD.available())
-                        {
-                            uint32_t position = 
-                                (
-                                    (io6502Read(PORT_FILE_SYSTEM_PRM_1) << 8) + 
-                                    io6502Read(PORT_FILE_SYSTEM_PRM_0)
-                                ) * FILE_SYSTEM_BLOCK_SIZE;
-                            bool result = fuzixHD.seek(position);
-                            if (result)
-                            {
-                                io6502Write(PORT_FILE_SYSTEM_STATUS, (uint8_t)fileSystemStatus_e::OK);
-                            #if (DEBUG_IO == 1)
-                                SerDebug.print("FS:SEEK:OK ");
-                                SerDebug.println(position);
-                            #endif
-                            }
-                            else
-                            {
-                                io6502Write(PORT_FILE_SYSTEM_STATUS, (uint8_t)fileSystemStatus_e::NOK);
-                            #if (DEBUG_IO == 1)
-                                SerDebug.println("FS:SEEK:NOK");
-                            #endif
-                            }
-                        }
-                        else
-                        {
-                            io6502Write(PORT_FILE_SYSTEM_STATUS, (uint8_t)fileSystemStatus_e::NOK);
-                        #if (DEBUG_IO == 1)
-                            SerDebug.println("FS:SEEK:NOK_NOT_AVAIL");
-                        #endif
-                        }
-                    }
+                    fsCmdWrite(cpuData);
                     break;
                 }
-                case PORT_FILE_SYSTEM_DATA:
+                case PORT_FS_PRM_0:
                 {
-                    if (fuzixHD.available())
-                    {
-                        bool result = fuzixHD.write(cpuData);
-                        if (result)
-                        {
-                            io6502Write(PORT_FILE_SYSTEM_STATUS, (uint8_t)fileSystemStatus_e::OK);
-                        }
-                        else
-                        {
-                            io6502Write(PORT_FILE_SYSTEM_STATUS, (uint8_t)fileSystemStatus_e::NOK);
-                        }
-                    }
-                    else
-                    {
-                        io6502Write(PORT_FILE_SYSTEM_STATUS, (uint8_t)fileSystemStatus_e::NOK);
-                    }
+                    fsPrm0 = cpuData;
                     break;
                 }
+                case PORT_FS_PRM_1:
+                {
+                    fsPrm1 = cpuData;
+                    break;
+                }
+                case PORT_FS_DATA:
+                {
+                    fsDataWrite(cpuData);
+                    break;
+                }
+                //case PORT_FS_STATUS:
                 // ******** Irq timer registers ********
                 case PORT_IRQ_TIMER_TARGET:
-                {   // write target
+                {
                     irqTimerWrite(cpuData);
                     break;
                 }
-                /*
-                case PORT_IRQ_TIMER_COUNT:
-                */
+                //case PORT_IRQ_TIMER_COUNT:
                 case PORT_IRQ_TIMER_RESET:
-                {   // reset the timer
+                {
                     irqTimerReset();
                     break;
                 }
                 case PORT_IRQ_TIMER_TRIG:
-                {   // trigger the timer
+                {
                     irqTimerTrig();
                     break;
                 }
                 case PORT_IRQ_TIMER_PAUSE:
-                {   // pause the timer
+                {
                     irqTimerPause();
                     break;
                 }
                 case PORT_IRQ_TIMER_CONT:
-                {   // unpause the timer
+                {
                     irqTimerCont();
                     break;
                 }
                 // ******** All other I/O registers ********
                 default: 
                 {         
-                #if 0//(DEBUG_IO == 1)
-                    SerDebug.print("iow ");
-                    SerDebug.print(cpuAddr, HEX);
-                    SerDebug.print(":");
-                    SerDebug.println(cpuData, HEX);
-                #endif
                     break;
                 }
             }
+            debugIOWrite();
+            delayNanoseconds(62 - 40); // tPWH >= 62ns @3.3V
             digitalWriteFast(GPIO_CLK, 0);
-            DELAY_10();
+            delayNanoseconds(10); // tDHW >=10ns @3.3V
         }
         else
-        {   // normal banked memory write
-            DELAY_40(); // tMDS >= 40ns @3.3V
+        {   // banked memory write
+            delayNanoseconds(40); // tMDS >= 40ns @3.3V
             cpuData = dataBusRead();
             banked6502Write(cpuAddr, cpuData);
+            debugMemWrite();
+            delayNanoseconds(62 - 40); // tPWH >= 62ns @3.3V
             digitalWriteFast(GPIO_CLK, 0);
-            DELAY_10();
+            delayNanoseconds(10); // tDHW >=10ns @3.3V
         }
     }
-    
-    #if TRACE_CLK == 1
-        char buf[9];
-        sprintf(buf, "%04X : %02X", cpuAddr, cpuData);
-        SerDebug.println(buf);
-        while (!SerDebug.available());
-        SerDebug.read();
-    #endif
-    cpuTicks++;
+    debugStep();
 }
 
 static inline void cpuReset(void)
@@ -461,87 +366,75 @@ void setup()
     SerDebug.begin(115200);
     uint32_t startTime = millis();
     while (!SerDebug) // wait for SerDebug connection...
-    {              
-        // ...or 2.5s timeout
+    {   // ...or 2.5s timeout
         if (micros() >= (startTime + 2500))
         {
             break;
         }
     }
     delay(10);
-    SerDebug.println("\n########\n\rStarting Teensy glue logic...");
+    SerDebug.println("\n\n\n\n###\n\rStarting Teensy glue logic...");
         
     // load Fuzix kernel, starting @1KiB
-    memcpy(&memory6502[1024], &fuzix_kernel, sizeof(fuzix_kernel));
-    // load it @512+1KiB as well
-    memcpy(&memory6502[(512 * 1024) + 1024], &fuzix_kernel, sizeof(fuzix_kernel));
+    memcpy(&ram6502[1024], &fuzix_kernel, sizeof(fuzix_kernel));
     
     // init bank registers
-    io6502Write(PORT_BANK_0, 32);
-    io6502Write(PORT_BANK_1, 33);
-    io6502Write(PORT_BANK_2, 34);
-    io6502Write(PORT_BANK_3, 35);
+    bankReg[0] = 0;
+    bankReg[1] = 1;
+    bankReg[2] = 2;
+    bankReg[3] = 3;
 
-    cpuTicks = 0;
     irqTimerInit();
     
-    // init filesystem
-    if (!SD.begin(SD_CS)) 
-    {
-        SerDebug.println("SD-card missing?");
-    }
-    else
-    {
-        fuzixHD = SD.open("filesys.img", FILE_READ);
-        if (fuzixHD.available())
-        {
-            SerDebug.println("filesys.img opened");
-        }
-        else
-        {
-            SerDebug.println("filesys.img failed to open");
-        }        
-    }
+    fsInit();
     
     SerDebug.println("Teensy started");
-    startTime = micros();
+    #if (DEBUG_SPEED == 1)
+    frameCounter = 0;
+    frameTimeAdded = 0;
+    frameTimeMin = INT32_MAX;
+    frameTimeMax = INT32_MIN;
+    #endif
+    frameTimer = micros() + FRAME_TIME_US;
 }
     
 void loop() 
 {
-    #if DEBUG_SPEED == 1
-        uint32_t cpuTimeBegin = micros();
-    #endif
-    
-    for(int i = 0; i < (IRQ_TIMER_FREQ / FRAME_RATE); i++)
+    // sync with next frame start
+    while (micros() < frameTimer)
     {
+    }
+    
+    // run cpu for a whole frame
+    for(int i = 0; i < (IRQ_TIMER_FREQ / FRAME_RATE); i++)
+    {   // run cpu for a timer-tick
         for(int j = 0; j < (CPU_FREQUENCY / IRQ_TIMER_FREQ); j++)
         {
             cpuTick();
         }
         irqTimerTick();
     }
-    
-    #if DEBUG_SPEED == 1
-        int32_t cpuTime = micros() - cpuTimeBegin;
-        SerDebug.println(cpuTime);
+
+    #if (DEBUG_SPEED == 1)
+    // statistics
+    frameTimeElapsed = micros() - frameTimer;
+    frameTimeAdded += frameTimeElapsed;
+    frameTimeMin = min(frameTimeElapsed, frameTimeMin);
+    frameTimeMax = max(frameTimeElapsed, frameTimeMax);
+    if ((frameCounter % FRAME_RATE) == 0)
+    {   // once per second print average/min/max cpu-load
+        SerDebug.print((frameTimeAdded / FRAME_RATE) * 100.0 / FRAME_TIME_US);
+        SerDebug.print("% ");
+        SerDebug.print(frameTimeMin * 100.0 / FRAME_TIME_US);
+        SerDebug.print("% ");
+        SerDebug.print(frameTimeMax * 100.0 / FRAME_TIME_US);
+        SerDebug.println("%");
+        frameTimeAdded = 0;
+        frameTimeMin = INT32_MAX;
+        frameTimeMax = INT32_MIN;
+    }
     #endif
-    
-    while (micros() < (startTime + FRAME_TIME_US));
-    startTime += FRAME_TIME_US;
+
+    frameTimer += FRAME_TIME_US;
+    frameCounter++;
 }
-
-/* 
-
-*** count CPU-cycles ***
-uint32_t countCycles = ARM_DWT_CYCCNT;
-...
-countCycles = ARM_DWT_CYCCNT - countCycles - 2;
-SerDebug.println(countCycles);
-
-minicom -D /dev/ttyACM0
-minicom -D /dev/ttyACM1
-minicom -D /dev/ttyACM2
-arduino --upload digital_test.ino
-arduino --verify digital_test.ino
-*/

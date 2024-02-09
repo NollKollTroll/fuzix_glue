@@ -1,5 +1,5 @@
 /*
-Written in 2022 by Adam Klotblixt (adam.klotblixt@gmail.com)
+Written in 2022-24 by Adam Klotblixt (adam.klotblixt@gmail.com)
 
 To the extent possible under law, the author have dedicated all
 copyright and related and neighboring rights to this software to the
@@ -48,38 +48,6 @@ along with this software. If not, see
 #define GPIO_BE       29  // 65C02 pin 36
 #define GPIO_IRQ      33  // 65C02 pin 04
 
-// delay ~10ns @600MHz
-#define DELAY_10() asm volatile ("mov r0,r0\n mov r1,r1\n mov r2,r2\n mov r3,r3\n mov r4,r4\n mov r5,r5\n mov r6,r6\n mov r7,r7\n\
-                                  mov r0,r0\n mov r1,r1\n mov r2,r2\n mov r3,r3\n mov r4,r4\n\
-                                 ");
-
-// delay ~40ns @600MHz
-#define DELAY_40() asm volatile ("mov r0,r0\n mov r1,r1\n mov r2,r2\n mov r3,r3\n mov r4,r4\n mov r5,r5\n mov r6,r6\n mov r7,r7\n\
-                                  mov r0,r0\n mov r1,r1\n mov r2,r2\n mov r3,r3\n mov r4,r4\n mov r5,r5\n mov r6,r6\n mov r7,r7\n\
-                                  mov r0,r0\n mov r1,r1\n mov r2,r2\n mov r3,r3\n mov r4,r4\n mov r5,r5\n mov r6,r6\n mov r7,r7\n\
-                                  mov r0,r0\n mov r1,r1\n mov r2,r2\n mov r3,r3\n mov r4,r4\n mov r5,r5\n mov r6,r6\n mov r7,r7\n\
-                                  mov r0,r0\n mov r1,r1\n mov r2,r2\n mov r3,r3\n mov r4,r4\n mov r5,r5\n mov r6,r6\n mov r7,r7\n\
-                                  mov r0,r0\n mov r1,r1\n mov r2,r2\n mov r3,r3\n mov r4,r4\n mov r5,r5\n mov r6,r6\n mov r7,r7\n\
-                                  mov r0,r0\n\
-                                 ");
-
-// delay ~100ns @600MHz
-#define DELAY_100() asm volatile ("mov r0,r0\n mov r1,r1\n mov r2,r2\n mov r3,r3\n mov r4,r4\n mov r5,r5\n mov r6,r6\n mov r7,r7\n\
-                                   mov r0,r0\n mov r1,r1\n mov r2,r2\n mov r3,r3\n mov r4,r4\n mov r5,r5\n mov r6,r6\n mov r7,r7\n\
-                                   mov r0,r0\n mov r1,r1\n mov r2,r2\n mov r3,r3\n mov r4,r4\n mov r5,r5\n mov r6,r6\n mov r7,r7\n\
-                                   mov r0,r0\n mov r1,r1\n mov r2,r2\n mov r3,r3\n mov r4,r4\n mov r5,r5\n mov r6,r6\n mov r7,r7\n\
-                                   mov r0,r0\n mov r1,r1\n mov r2,r2\n mov r3,r3\n mov r4,r4\n mov r5,r5\n mov r6,r6\n mov r7,r7\n\
-                                   mov r0,r0\n mov r1,r1\n mov r2,r2\n mov r3,r3\n mov r4,r4\n mov r5,r5\n mov r6,r6\n mov r7,r7\n\
-                                   mov r0,r0\n mov r1,r1\n mov r2,r2\n mov r3,r3\n mov r4,r4\n mov r5,r5\n mov r6,r6\n mov r7,r7\n\
-                                   mov r0,r0\n mov r1,r1\n mov r2,r2\n mov r3,r3\n mov r4,r4\n mov r5,r5\n mov r6,r6\n mov r7,r7\n\
-                                   mov r0,r0\n mov r1,r1\n mov r2,r2\n mov r3,r3\n mov r4,r4\n mov r5,r5\n mov r6,r6\n mov r7,r7\n\
-                                   mov r0,r0\n mov r1,r1\n mov r2,r2\n mov r3,r3\n mov r4,r4\n mov r5,r5\n mov r6,r6\n mov r7,r7\n\
-                                   mov r0,r0\n mov r1,r1\n mov r2,r2\n mov r3,r3\n mov r4,r4\n mov r5,r5\n mov r6,r6\n mov r7,r7\n\
-                                   mov r0,r0\n mov r1,r1\n mov r2,r2\n mov r3,r3\n mov r4,r4\n mov r5,r5\n mov r6,r6\n mov r7,r7\n\
-                                   mov r0,r0\n mov r1,r1\n mov r2,r2\n mov r3,r3\n mov r4,r4\n mov r5,r5\n mov r6,r6\n mov r7,r7\n\
-                                   mov r0,r0\n mov r1,r1\n mov r2,r2\n mov r3,r3\n mov r4,r4\n mov r5,r5\n mov r6,r6\n mov r7,r7\n\
-                                   mov r0,r0\n mov r1,r1\n mov r2,r2\n mov r3,r3\n mov r4,r4\n mov r5,r5\n mov r6,r6\n mov r7,r7\n\
-                                   mov r0,r0\n mov r1,r1\n mov r2,r2\n mov r3,r3\n mov r4,r4\n mov r5,r5\n\
-                                  ");
+#define SD_CS         BUILTIN_SDCARD
 
 #endif //PINDEFS_H                                  

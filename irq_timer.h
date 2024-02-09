@@ -1,5 +1,5 @@
 /*
-Written in 2022 by Adam Klotblixt (adam.klotblixt@gmail.com)
+Written in 2022-24 by Adam Klotblixt (adam.klotblixt@gmail.com)
 
 To the extent possible under law, the author have dedicated all
 copyright and related and neighboring rights to this software to the
@@ -82,7 +82,7 @@ static inline void irqTimerCont()
     digitalWriteFast(GPIO_IRQ, 1);    
 }
 
-static inline uint8_t readTimerCount()
+static inline uint8_t irqTimerCountRead()
 {
     return(irqTimerTicks);
 }

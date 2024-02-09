@@ -1,5 +1,5 @@
 /*
-Written in 2022 by Adam Klotblixt (adam.klotblixt@gmail.com)
+Written in 2022-24 by Adam Klotblixt (adam.klotblixt@gmail.com)
 
 To the extent possible under law, the author have dedicated all
 copyright and related and neighboring rights to this software to the
@@ -33,23 +33,16 @@ along with this software. If not, see
 #define SERIAL_FLAGS_IN_AVAIL       64
 
 // ******** File system ********
-#define PORT_FILE_SYSTEM_CMD    0xFE60
-#define PORT_FILE_SYSTEM_PRM_0  0xFE61
-#define PORT_FILE_SYSTEM_PRM_1  0xFE62
-#define PORT_FILE_SYSTEM_DATA   0xFE63
-#define PORT_FILE_SYSTEM_STATUS 0xFE64
-#define FILE_SYSTEM_BLOCK_SIZE  512
-enum class fileSystemCmd_e
-{
-    SELECT = 0,
-    SEEK = 1
-};
-
-enum class fileSystemStatus_e
-{
-    OK = 0,
-    NOK = 1
-};
+#define PORT_FS_CMD             0xFE60
+#define PORT_FS_PRM_0           0xFE61
+#define PORT_FS_PRM_1           0xFE62
+#define PORT_FS_DATA            0xFE63
+#define PORT_FS_STATUS          0xFE64
+#define FS_BLOCK_SIZE              512
+#define FS_CMD_SELECT                0
+#define FS_CMD_SEEK                  1
+#define FS_STATUS_OK                 0
+#define FS_STATUS_NOK                1
 
 // ******** Timer ********
 #define PORT_IRQ_TIMER_TARGET   0xFE80  //writing sets the target and enables timer
