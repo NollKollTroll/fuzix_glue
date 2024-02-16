@@ -132,15 +132,15 @@ static inline void cpuTick(void)
                     }
                     break;
                 // ******** File system registers ********
-                //case IO_FS_CMD:
-                //case IO_FS_PRM_0:
-                //case IO_FS_PRM_1:
-                //case IO_FS_PRM_2:
-                //case IO_FS_PRM_3:
-                case IO_FS_DATA:
+                //case IO_DISK_CMD:
+                //case IO_DISK_PRM_0:
+                //case IO_DISK_PRM_1:
+                //case IO_DISK_PRM_2:
+                //case IO_DISK_PRM_3:
+                case IO_DISK_DATA:
                     cpuData = fsDataRead();
                     break;
-                case IO_FS_STATUS:
+                case IO_DISK_STATUS:
                     cpuData = fsStatus;
                     break;
                 // ******** Irq timer registers ********
@@ -218,25 +218,25 @@ static inline void cpuTick(void)
                     SerPC1.write(cpuData);
                     break;
                 // ******** File system registers ********
-                case IO_FS_CMD:
+                case IO_DISK_CMD:
                     fsCmdWrite(cpuData);
                     break;
-                case IO_FS_PRM_0:
+                case IO_DISK_PRM_0:
                     fsPrm0 = cpuData;
                     break;
-                case IO_FS_PRM_1:
+                case IO_DISK_PRM_1:
                     fsPrm1 = cpuData;
                     break;
-                case IO_FS_PRM_2:
+                case IO_DISK_PRM_2:
                     fsPrm2 = cpuData;
                     break;
-                case IO_FS_PRM_3:
+                case IO_DISK_PRM_3:
                     fsPrm3 = cpuData;
                     break;
-                case IO_FS_DATA:
+                case IO_DISK_DATA:
                     fsDataWrite(cpuData);
                     break;
-                //case IO_FS_STATUS:
+                //case IO_DISK_STATUS:
                 // ******** Irq timer registers ********
                 case IO_TIMER_TARGET:
                     timerWrite(cpuData);

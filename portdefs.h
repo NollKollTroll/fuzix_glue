@@ -33,18 +33,18 @@ along with this software. If not, see
 #define SERIAL_FLAGS_IN_AVAIL       64
 
 // ******** File system ********
-#define IO_FS_CMD               0xFE60
-#define IO_FS_PRM_0             0xFE61
-#define IO_FS_PRM_1             0xFE62
-#define IO_FS_PRM_2             0xFE63
-#define IO_FS_PRM_3             0xFE64
-#define IO_FS_DATA              0xFE65
-#define IO_FS_STATUS            0xFE66
-#define FS_BLOCK_SIZE              512
-#define FS_CMD_SELECT                0
-#define FS_CMD_SEEK                  1
-#define FS_STATUS_OK                 0
-#define FS_STATUS_NOK                1
+#define IO_DISK_CMD             0xFE60
+#define IO_DISK_PRM_0           0xFE61
+#define IO_DISK_PRM_1           0xFE62
+#define IO_DISK_PRM_2           0xFE63
+#define IO_DISK_PRM_3           0xFE64
+#define IO_DISK_DATA            0xFE65
+#define IO_DISK_STATUS          0xFE66
+#define DISK_BLOCK_SIZE            512
+#define DISK_CMD_SELECT              0
+#define DISK_CMD_SEEK                1
+#define DISK_STATUS_OK               0
+#define DISK_STATUS_NOK              1
 
 // ******** Timer ********
 #define IO_TIMER_TARGET         0xFE80  //writing sets the target and enables timer
