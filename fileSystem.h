@@ -20,6 +20,8 @@ File fuzixHD;
 uint8_t fsStatus;
 uint8_t fsPrm0;
 uint8_t fsPrm1;
+uint8_t fsPrm2;
+uint8_t fsPrm3;
 
 void fsInit()
 {
@@ -27,20 +29,23 @@ void fsInit()
     if (!SD.begin(SD_CS))
     {
         SerDebug.println("SD-card missing?");
+        fsStatus = FS_STATUS_NOK;
     }
     else
     {
-        fuzixHD = SD.open("filesys.img", FILE_READ);
+        fuzixHD = SD.open("disk.img", FILE_WRITE);
+        fuzixHD.seek(0);
         if (fuzixHD.available())
         {
-            SerDebug.println("filesys.img opened");
+            SerDebug.println("disk.img opened");
+            fsStatus = FS_STATUS_OK;
         }
         else
         {
-            SerDebug.println("filesys.img failed to open");
+            SerDebug.println("disk.img failed to open");
+            fsStatus = FS_STATUS_NOK;
         }
     }
-    fsStatus = FS_STATUS_NOK;
 }
 
 static inline void fsCmdWrite(uint8_t cpuData)
@@ -66,7 +71,7 @@ static inline void fsCmdWrite(uint8_t cpuData)
     {
         if (fuzixHD.available())
         {
-            uint32_t position = ((fsPrm1 << 8) + fsPrm0) * FS_BLOCK_SIZE;
+            uint32_t position = FS_BLOCK_SIZE * (fsPrm0 + (fsPrm1 << 8) + (fsPrm2 << 16));
             bool result = fuzixHD.seek(position);
             if (result)
             {

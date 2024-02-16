@@ -18,10 +18,10 @@ along with this software. If not, see
 
 #define RAM_SIZE_KIB          512
 #define RAM_SIZE              (RAM_SIZE_KIB * 1024)
+#define NR_OF_BANKS           4
 #define BANK_SIZE_KIB         16
 #define BANK_SIZE             (BANK_SIZE_KIB * 1024)
 #define NR_OF_BLOCKS          (RAM_SIZE_KIB / BANK_SIZE_KIB)
-#define NR_OF_BANKS           (64 / BANK_SIZE_KIB)
 #define CPU_FREQUENCY         2000000 //Hz, 65C02
 #define FRAME_RATE            60 //Hz
 #define FRAME_TIME_US         (1000000 / FRAME_RATE) //microseconds
@@ -40,16 +40,16 @@ uint32_t frameCounter;
 #include "portdefs.h"
 #include "pindefs.h"
 #include "fast_addr_data.h"
-#include "irq_timer.h"
+#include "timer.h"
 #include "fileSystem.h"
 #include "fuzix_kernel.h"
 #include "trace_debug.h"
 
+uint8_t cpuData;
+uint16_t cpuAddr;
+
 static inline void cpuTick(void)
 {
-    uint8_t cpuData;
-    uint16_t cpuAddr;
-
     // entering CLK phase low
     // lots of delay already because of looping
     // but the low CLK must be at least tPWL long
@@ -76,29 +76,20 @@ static inline void cpuTick(void)
             switch (cpuAddr)
             {
                 // ******** Memory bank registers ********
-                case PORT_BANK_0:
-                {
+                case IO_BANK_0:
                     cpuData = bankReg[0];
                     break;
-                }
-                case PORT_BANK_1:
-                {
+                case IO_BANK_1:
                     cpuData = bankReg[1];
                     break;
-                }
-                case PORT_BANK_2:
-                {
+                case IO_BANK_2:
                     cpuData = bankReg[2];
                     break;
-                }
-                case PORT_BANK_3:
-                {
+                case IO_BANK_3:
                     cpuData = bankReg[3];
                     break;
-                }
                 // ******** Serial port registers ********
-                case PORT_SERIAL_0_FLAGS: 
-                {
+                case IO_SERIAL_0_FLAGS:
                     cpuData = 0;
                     if (SerPC0.available()) 
                     {
@@ -109,9 +100,7 @@ static inline void cpuTick(void)
                         cpuData |= 128;
                     }
                     break;
-                }
-                case PORT_SERIAL_0_IN: 
-                {
+                case IO_SERIAL_0_IN:
                     if (SerPC0.available()) 
                     {
                         cpuData = SerPC0.read();
@@ -121,9 +110,7 @@ static inline void cpuTick(void)
                         cpuData = 0;
                     }
                     break;
-                }
-                case PORT_SERIAL_1_FLAGS: 
-                {
+                case IO_SERIAL_1_FLAGS:
                     cpuData = 0;
                     if (SerPC1.available()) 
                     {
@@ -134,9 +121,7 @@ static inline void cpuTick(void)
                         cpuData |= 128;
                     }
                     break;
-                }
-                case PORT_SERIAL_1_IN: 
-                {
+                case IO_SERIAL_1_IN:
                     if (SerPC1.available()) 
                     {
                         cpuData = SerPC1.read();
@@ -146,43 +131,33 @@ static inline void cpuTick(void)
                         cpuData = 0;
                     }
                     break;
-                }
                 // ******** File system registers ********
-                //case PORT_FS_CMD:
-                //case PORT_FS_PRM_0:
-                //case PORT_FS_PRM_1:
-                case PORT_FS_DATA:
-                {
+                //case IO_FS_CMD:
+                //case IO_FS_PRM_0:
+                //case IO_FS_PRM_1:
+                //case IO_FS_PRM_2:
+                //case IO_FS_PRM_3:
+                case IO_FS_DATA:
                     cpuData = fsDataRead();
                     break;
-                }
-                case PORT_FS_STATUS:
-                {
+                case IO_FS_STATUS:
                     cpuData = fsStatus;
                     break;
-                }
                 // ******** Irq timer registers ********
-                case PORT_IRQ_TIMER_TARGET:
-                {
-                    cpuData = irqTimerTarget;
+                case IO_TIMER_TARGET:
+                    cpuData = timerTarget;
                     break;
-                }
-                case PORT_IRQ_TIMER_COUNT:
-                {
-                    cpuData = irqTimerCountRead();
+                case IO_TIMER_COUNT:
+                    cpuData = timerCountRead();
                     break;
-                }
-                //case PORT_IRQ_TIMER_RESET:
-                //case PORT_IRQ_TIMER_TRIG:
-                //case PORT_IRQ_TIMER_PAUSE:
-                //case PORT_IRQ_TIMER_CONT:
+                //case IO_TIMER_RESET:
+                //case IO_TIMER_TRIG:
+                //case IO_TIMER_PAUSE:
+                //case IO_TIMER_CONT:
                 // ******** All other I/O registers ********
                 default:
-                {
                     cpuData = 0xFF;
                     break;
-                }
-
             }
             dataBusWrite(cpuData);
             dataBusOutput();
@@ -223,91 +198,69 @@ static inline void cpuTick(void)
             switch (cpuAddr)
             {
                 // ******** Memory bank registers ********
-                case PORT_BANK_0:
-                {
+                case IO_BANK_0:
                     bankReg[0] = cpuData;
                     break;
-                }
-                case PORT_BANK_1:
-                {
+                case IO_BANK_1:
                     bankReg[1] = cpuData;
                     break;
-                }
-                case PORT_BANK_2:
-                {
+                case IO_BANK_2:
                     bankReg[2] = cpuData;
                     break;
-                }
-                case PORT_BANK_3:
-                {
+                case IO_BANK_3:
                     bankReg[3] = cpuData;
                     break;
-                }
                 // ******** Serial port registers ********
-                case PORT_SERIAL_0_OUT: 
-                {
+                case IO_SERIAL_0_OUT:
                     SerPC0.write(cpuData);
                     break;
-                }
-                case PORT_SERIAL_1_OUT: 
-                {
+                case IO_SERIAL_1_OUT:
                     SerPC1.write(cpuData);
                     break;
-                }                    
                 // ******** File system registers ********
-                case PORT_FS_CMD:
-                {
+                case IO_FS_CMD:
                     fsCmdWrite(cpuData);
                     break;
-                }
-                case PORT_FS_PRM_0:
-                {
+                case IO_FS_PRM_0:
                     fsPrm0 = cpuData;
                     break;
-                }
-                case PORT_FS_PRM_1:
-                {
+                case IO_FS_PRM_1:
                     fsPrm1 = cpuData;
                     break;
-                }
-                case PORT_FS_DATA:
-                {
+                case IO_FS_PRM_2:
+                    fsPrm2 = cpuData;
+                    break;
+                case IO_FS_PRM_3:
+                    fsPrm3 = cpuData;
+                    break;
+                case IO_FS_DATA:
                     fsDataWrite(cpuData);
                     break;
-                }
-                //case PORT_FS_STATUS:
+                //case IO_FS_STATUS:
                 // ******** Irq timer registers ********
-                case PORT_IRQ_TIMER_TARGET:
-                {
-                    irqTimerWrite(cpuData);
+                case IO_TIMER_TARGET:
+                    timerWrite(cpuData);
+                    digitalWriteFast(GPIO_IRQ, timerIrqPin);
                     break;
-                }
-                //case PORT_IRQ_TIMER_COUNT:
-                case PORT_IRQ_TIMER_RESET:
-                {
-                    irqTimerReset();
+                //case IO_TIMER_COUNT:
+                case IO_TIMER_RESET:
+                    timerReset();
+                    digitalWriteFast(GPIO_IRQ, timerIrqPin);
                     break;
-                }
-                case PORT_IRQ_TIMER_TRIG:
-                {
-                    irqTimerTrig();
+                case IO_TIMER_TRIG:
+                    timerTrig();
+                    digitalWriteFast(GPIO_IRQ, timerIrqPin);
                     break;
-                }
-                case PORT_IRQ_TIMER_PAUSE:
-                {
-                    irqTimerPause();
+                case IO_TIMER_PAUSE:
+                    timerPause();
                     break;
-                }
-                case PORT_IRQ_TIMER_CONT:
-                {
-                    irqTimerCont();
+                case IO_TIMER_CONT:
+                    timerCont();
+                    digitalWriteFast(GPIO_IRQ, timerIrqPin);
                     break;
-                }
                 // ******** All other I/O registers ********
                 default: 
-                {         
                     break;
-                }
             }
             debugIOWrite();
             delayNanoseconds(62 - 40); // tPWH >= 62ns @3.3V
@@ -374,9 +327,10 @@ void setup()
     }
     delay(10);
     SerDebug.println("\n\n\n\n###\n\rStarting Teensy glue logic...");
-        
-    // load Fuzix kernel, starting @1KiB
-    memcpy(&ram6502[1024], &fuzix_kernel, sizeof(fuzix_kernel));
+
+    SerDebug.println("Putting Fuzix code into ram");
+    // load Fuzix kernel, skipping ZP & stack
+    memcpy(&ram6502[512], &fuzix_kernel[512], sizeof(fuzix_kernel) - 512);
     
     // init bank registers
     bankReg[0] = 0;
@@ -384,7 +338,7 @@ void setup()
     bankReg[2] = 2;
     bankReg[3] = 3;
 
-    irqTimerInit();
+    timerInit();
     
     fsInit();
     
@@ -412,7 +366,8 @@ void loop()
         {
             cpuTick();
         }
-        irqTimerTick();
+        timerTick();
+        digitalWriteFast(GPIO_IRQ, timerIrqPin);
     }
 
     #if (DEBUG_SPEED == 1)
