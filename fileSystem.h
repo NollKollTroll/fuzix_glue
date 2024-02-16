@@ -29,7 +29,7 @@ void fsInit()
     if (!SD.begin(SD_CS))
     {
         SerDebug.println("SD-card missing?");
-        fsStatus = FS_STATUS_NOK;
+        fsStatus = DISK_STATUS_NOK;
     }
     else
     {
@@ -38,44 +38,44 @@ void fsInit()
         if (fuzixHD.available())
         {
             SerDebug.println("disk.img opened");
-            fsStatus = FS_STATUS_OK;
+            fsStatus = DISK_STATUS_OK;
         }
         else
         {
             SerDebug.println("disk.img failed to open");
-            fsStatus = FS_STATUS_NOK;
+            fsStatus = DISK_STATUS_NOK;
         }
     }
 }
 
 static inline void fsCmdWrite(uint8_t cpuData)
 {
-    if (cpuData == FS_CMD_SELECT)
+    if (cpuData == DISK_CMD_SELECT)
     {
         if (fuzixHD.available())
         {
-            fsStatus = FS_STATUS_OK;
+            fsStatus = DISK_STATUS_OK;
         #if (DEBUG_IO == 1)
             SerDebug.println("FS:SELECT:OK");
         #endif
         }
         else
         {
-            fsStatus = FS_STATUS_NOK;
+            fsStatus = DISK_STATUS_NOK;
         #if (DEBUG_IO == 1)
             SerDebug.println("FS:SELECT:NOK_NOT_AVAIL");
         #endif
         }
     }
-    else if (cpuData == FS_CMD_SEEK)
+    else if (cpuData == DISK_CMD_SEEK)
     {
         if (fuzixHD.available())
         {
-            uint32_t position = FS_BLOCK_SIZE * (fsPrm0 + (fsPrm1 << 8) + (fsPrm2 << 16));
+            uint32_t position = DISK_BLOCK_SIZE * (fsPrm0 + (fsPrm1 << 8) + (fsPrm2 << 16));
             bool result = fuzixHD.seek(position);
             if (result)
             {
-                fsStatus = FS_STATUS_OK;
+                fsStatus = DISK_STATUS_OK;
             #if (DEBUG_IO == 1)
                 SerDebug.print("FS:SEEK:OK ");
                 SerDebug.println(position);
@@ -83,7 +83,7 @@ static inline void fsCmdWrite(uint8_t cpuData)
             }
             else
             {
-                fsStatus = FS_STATUS_NOK;
+                fsStatus = DISK_STATUS_NOK;
             #if (DEBUG_IO == 1)
                 SerDebug.println("FS:SEEK:NOK");
             #endif
@@ -91,7 +91,7 @@ static inline void fsCmdWrite(uint8_t cpuData)
         }
         else
         {
-            fsStatus = FS_STATUS_NOK;
+            fsStatus = DISK_STATUS_NOK;
         #if (DEBUG_IO == 1)
             SerDebug.println("FS:SEEK:NOK_NOT_AVAIL");
         #endif
@@ -105,12 +105,12 @@ static inline uint8_t fsDataRead()
     if (fuzixHD.available())
     {
         cpuData = fuzixHD.read();
-        fsStatus = FS_STATUS_OK;
+        fsStatus = DISK_STATUS_OK;
     }
     else
     {
         cpuData = 0;
-        fsStatus = FS_STATUS_NOK;
+        fsStatus = DISK_STATUS_NOK;
     }
     return cpuData;
 }
@@ -122,16 +122,16 @@ static inline void fsDataWrite(uint8_t cpuData)
         bool result = fuzixHD.write(cpuData);
         if (result)
         {
-            fsStatus = FS_STATUS_OK;
+            fsStatus = DISK_STATUS_OK;
         }
         else
         {
-            fsStatus = FS_STATUS_NOK;
+            fsStatus = DISK_STATUS_NOK;
         }
     }
     else
     {
-        fsStatus = FS_STATUS_NOK;
+        fsStatus = DISK_STATUS_NOK;
     }
 }
 
